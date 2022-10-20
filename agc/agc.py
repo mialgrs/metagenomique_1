@@ -1,15 +1,5 @@
-#!/bin/env python3
+#! /bin/env python3
 # -*- coding: utf-8 -*-
-#    This program is free software: you can redistribute it and/or modify
-#    it under the terms of the GNU General Public License as published by
-#    the Free Software Foundation, either version 3 of the License, or
-#    (at your option) any later version.
-#    This program is distributed in the hope that it will be useful,
-#    but WITHOUT ANY WARRANTY; without even the implied warranty of
-#    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-#    GNU General Public License for more details.
-#    A copy of the GNU General Public License is available at
-#    http://www.gnu.org/licenses/gpl-3.0.html
 
 """OTU clustering"""
 
@@ -17,20 +7,18 @@ import argparse
 import sys
 import os
 import gzip
-import statistics
 import textwrap
-from collections import Counter
 # https://github.com/briney/nwalign3
 # ftp://ftp.ncbi.nih.gov/blast/matrices/
 import nwalign3 as nw
 
-__author__ = "Your Name"
+__author__ = "Mia Legras"
 __copyright__ = "Universite Paris Diderot"
-__credits__ = ["Your Name"]
+__credits__ = ["Mia Legras"]
 __license__ = "GPL"
 __version__ = "1.0.0"
-__maintainer__ = "Your Name"
-__email__ = "your@email.fr"
+__maintainer__ = "Mia Legras"
+__email__ = "mialegras@gmail.com"
 __status__ = "Developpement"
 
 
@@ -56,37 +44,85 @@ def get_arguments():
     parser = argparse.ArgumentParser(description=__doc__, usage=
                                      "{0} -h"
                                      .format(sys.argv[0]))
-    parser.add_argument('-i', '-amplicon_file', dest='amplicon_file', type=isfile, required=True, 
-                        help="Amplicon is a compressed fasta file (.fasta.gz)")
-    parser.add_argument('-s', '-minseqlen', dest='minseqlen', type=int, default = 400,
-                        help="Minimum sequence length for dereplication (default 400)")
-    parser.add_argument('-m', '-mincount', dest='mincount', type=int, default = 10,
-                        help="Minimum count for dereplication  (default 10)")
-    parser.add_argument('-c', '-chunk_size', dest='chunk_size', type=int, default = 100,
+    parser.add_argument('-i', '-amplicon_file', dest='amplicon_file', 
+        type=isfile, required=True, 
+        help="Amplicon is a compressed fasta file (.fasta.gz)")
+    parser.add_argument('-s', '-minseqlen', dest='minseqlen', 
+        type=int, default = 400,
+        help="Minimum sequence length for dereplication (default 400)")
+    parser.add_argument('-m', '-mincount', dest='mincount', 
+        type=int, default = 10,
+        help="Minimum count for dereplication  (default 10)")
+    parser.add_argument('-c', '-chunk_size', dest='chunk_size', 
+                        type=int, default = 100,
                         help="Chunk size for dereplication  (default 100)")
-    parser.add_argument('-k', '-kmer_size', dest='kmer_size', type=int, default = 8,
+    parser.add_argument('-k', '-kmer_size', dest='kmer_size', 
+                        type=int, default = 8,
                         help="kmer size for dereplication  (default 10)")
     parser.add_argument('-o', '-output_file', dest='output_file', type=str,
                         default="OTU.fasta", help="Output file")
     return parser.parse_args()
 
-def read_fasta(amplicon_file, minseqlen):
-    pass
-
+def read_fasta(amplicon_file, minseqlen): # attention : yield marche pas avec fasta normaux
+        isfile(amplicon_file)
+        with gzip.open(amplicon_file, 'rt') as fasta:
+            seq = ""
+            for line in fasta:
+                if line.startswith('>'):
+                    if len(seq) > minseqlen:
+                        yield seq
+                    seq = ""
+                else:
+                    seq += line.strip() #recup ligne suiv
+            if len(seq) >= minseqlen:
+                yield seq
+     
 
 def dereplication_fulllength(amplicon_file, minseqlen, mincount):
-    pass
+    seq = list(read_fasta(amplicon_file, minseqlen))
+    uniqseq = set(seq)
+    res = []
+    for subseq in uniqseq:
+        occur = seq.count(subseq)
+        if occur >= mincount:
+            res.append([subseq, occur])
+    res = sorted(res, key=lambda x : x[1], reverse=True)
+    for i in res:
+        yield i
+
 
 def get_identity(alignment_list):
     """Prend en une liste de séquences alignées au format ["SE-QUENCE1", "SE-QUENCE2"]
     Retourne le pourcentage d'identite entre les deux."""
-    pass
+    seq1 = list(alignment_list[0])
+    seq2 = list(alignment_list[1])
+    nb_nucleo_id = 0
+    for i in range(len(seq1)):
+        if seq1[i] == seq2[i]:
+            nb_nucleo_id += 1
+    id = (nb_nucleo_id / len(seq1))*100
+    return id
 
-def abundance_greedy_clustering(amplicon_file, minseqlen, mincount, chunk_size, kmer_size):
-    pass
+
+def abundance_greedy_clustering(amplicon_file, minseqlen, mincount):
+    seq = list(dereplication_fulllength(amplicon_file, minseqlen, mincount))
+    OTU = [seq[0]]
+    for seq1 in seq[1:]:
+        for seq2 in OTU:
+            align = nw.global_align(seq1[0], seq2[0], gap_open=-1,
+                gap_extend=-1, matrix=os.path.abspath(os.path.join(
+                os.path.dirname(__file__),"MATCH")))
+        if get_identity(align)<97:
+            OTU.append(seq1)
+            print(OTU)
+    return OTU
+
 
 def write_OTU(OTU_list, output_file):
-    pass
+    with open(output_file, 'w') as file:
+        for i in range(len(OTU_list)):
+            file.write(f'>OTU_{i+1} occurrence:{OTU_list[i][1]}\n')
+            file.write(f'{textwrap.fill(OTU_list[i][0], width=80)}\n')
 
 #==============================================================
 # Main program
@@ -98,37 +134,9 @@ def main():
     # Get arguments
     args = get_arguments()
     # Votre programme ici
-
-#==============================================================
-# Chimera removal section
-#==============================================================
-
-def get_unique(ids):
-    return {}.fromkeys(ids).keys()
-
-def common(lst1, lst2): 
-    return list(set(lst1) & set(lst2))
-
-def get_chunks(sequence, chunk_size):
-    """Split sequences in a least 4 chunks
-    """
-    pass
-
-def cut_kmer(sequence, kmer_size):
-    """Cut sequence into kmers"""
-    pass
-
-def get_unique_kmer(kmer_dict, sequence, id_seq, kmer_size):
-    pass
-
-def detect_chimera(perc_identity_matrix):
-    pass
-
-def search_mates(kmer_dict, sequence, kmer_size):
-    pass
-
-def chimera_removal(amplicon_file, minseqlen, mincount, chunk_size, kmer_size):
-    pass
+    otu = abundance_greedy_clustering(args.amplicon_file, args.minseqlen, 
+        args.mincount)
+    print(otu)
 
 
 if __name__ == '__main__':
