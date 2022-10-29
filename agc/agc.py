@@ -44,39 +44,40 @@ def get_arguments():
     parser = argparse.ArgumentParser(description=__doc__, usage=
                                      "{0} -h"
                                      .format(sys.argv[0]))
-    parser.add_argument('-i', '-amplicon_file', dest='amplicon_file', 
-        type=isfile, required=True, 
+    parser.add_argument('-i', '-amplicon_file', dest='amplicon_file',
+        type=isfile, required=True,
         help="Amplicon is a compressed fasta file (.fasta.gz)")
-    parser.add_argument('-s', '-minseqlen', dest='minseqlen', 
+    parser.add_argument('-s', '-minseqlen', dest='minseqlen',
         type=int, default = 400,
         help="Minimum sequence length for dereplication (default 400)")
-    parser.add_argument('-m', '-mincount', dest='mincount', 
+    parser.add_argument('-m', '-mincount', dest='mincount',
         type=int, default = 10,
         help="Minimum count for dereplication  (default 10)")
-    parser.add_argument('-c', '-chunk_size', dest='chunk_size', 
+    parser.add_argument('-c', '-chunk_size', dest='chunk_size',
                         type=int, default = 100,
                         help="Chunk size for dereplication  (default 100)")
-    parser.add_argument('-k', '-kmer_size', dest='kmer_size', 
+    parser.add_argument('-k', '-kmer_size', dest='kmer_size',
                         type=int, default = 8,
                         help="kmer size for dereplication  (default 10)")
     parser.add_argument('-o', '-output_file', dest='output_file', type=str,
                         default="OTU.fasta", help="Output file")
     return parser.parse_args()
 
+
 def read_fasta(amplicon_file, minseqlen): # attention : yield marche pas avec fasta normaux
-        isfile(amplicon_file)
-        with gzip.open(amplicon_file, 'rt') as fasta:
-            seq = ""
-            for line in fasta:
-                if line.startswith('>'):
-                    if len(seq) > minseqlen:
-                        yield seq
-                    seq = ""
-                else:
-                    seq += line.strip() #recup ligne suiv
-            if len(seq) >= minseqlen:
-                yield seq
-     
+    isfile(amplicon_file)
+    with gzip.open(amplicon_file, 'rt') as fasta:
+        seq = ""
+        for line in fasta:
+            if line.startswith('>'):
+                if len(seq) > minseqlen:
+                    yield seq
+                seq = ""
+            else:
+                seq += line.strip() #recup ligne suiv
+        if len(seq) >= minseqlen:
+            yield seq
+
 
 def dereplication_fulllength(amplicon_file, minseqlen, mincount):
     seq = list(read_fasta(amplicon_file, minseqlen))
@@ -100,11 +101,12 @@ def get_identity(alignment_list):
     for i in range(len(seq1)):
         if seq1[i] == seq2[i]:
             nb_nucleo_id += 1
-    id = (nb_nucleo_id / len(seq1))*100
-    return id
+    identity = (nb_nucleo_id / len(seq1))*100
+    return identity
 
 
-def abundance_greedy_clustering(amplicon_file, minseqlen, mincount):
+def abundance_greedy_clustering(amplicon_file, minseqlen, mincount,
+                                chunk_size, kmer_size):
     seq = list(dereplication_fulllength(amplicon_file, minseqlen, mincount))
     OTU = [seq[0]]
     for seq1 in seq[1:]:
